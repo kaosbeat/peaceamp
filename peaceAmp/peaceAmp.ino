@@ -72,12 +72,33 @@ Oscil<SIN2048_NUM_CELLS, CONTROL_RATE> kTremelo(SIN2048_DATA);
 Line <unsigned int> aGain;
 
 
+//sketch4
+
+#include <Phasor.h>
+
+Phasor <AUDIO_RATE> aPhasor1;
+Phasor <AUDIO_RATE> aPhasor2;
+Phasor <AUDIO_RATE> aPhasor3;
+Phasor <AUDIO_RATE> aPhasor4;
+Phasor <AUDIO_RATE> aPhasor5;
+Phasor <AUDIO_RATE> aPhasor6;
+
+
+float pfreq1 = 55.f;
+float pfreq2 = 55.f;
+float pfreq3 = 55.f;
+
+//SKETCH 5
+Oscil <SIN2048_NUM_CELLS, AUDIO_RATE> aGain2(SIN2048_DATA); // to fade audio signal in and out before waveshaping
+Q16n16 s5freq1 = Q8n0_to_Q16n16(440);
+
+
 //setup control
 #include <Bounce2.h>
 #define BUTTON_PIN 6
 Bounce b = Bounce();
  
-const int numberOfSketches = 3;
+const int numberOfSketches = 5;
 int currentSketch = 0;
 int buttonState = 0;         // variable for reading the pushbutton status
 
@@ -136,6 +157,19 @@ void setup(){
   //setup sketch 2
   aSig.setFreq(mtof(65.f));
   kTremelo.setFreq(5.5f);
+
+  //setup sketch 3
+  aPhasor1.setFreq(pfreq1);
+  aPhasor2.setFreq(pfreq1+0.2f);
+  aPhasor3.setFreq(pfreq2);
+  aPhasor4.setFreq(pfreq2+0.2f);
+  aPhasor5.setFreq(pfreq3);
+  aPhasor6.setFreq(pfreq3+0.2f);
+
+
+  //SETUP SKETCH 4
+  aSin1.setFreq_Q16n16(s5freq1); // set the frequency with a Q16n16 fractional number
+  aGain2.setFreq(0.2f); // use a float for low frequencies, in setup it doesn't need to be fast
 }
 
 
@@ -165,6 +199,10 @@ void updateControl() {
 
     case 2:
       updateControlSketch2();
+    case 3:
+      updateControlSketch3();
+   case 4:
+      updateControlSketch4();
   }
 }
 
@@ -227,6 +265,31 @@ void updateControlSketch2(){
    aGain.set(gain, AUDIO_RATE / CONTROL_RATE); // divide of literals should get optimised away
 }
 
+void updateControlSketch3(){
+  pfreq1 = mtof(pot1/16.f);
+  pfreq2 = mtof(pot2/16.f);
+  pfreq3 = mtof(pot3/16.f);
+  aPhasor1.setFreq(pfreq1);
+  aPhasor2.setFreq(pfreq1+0.2f);
+  aPhasor3.setFreq(pfreq2);
+  aPhasor4.setFreq(pfreq2+0.2f);
+  aPhasor5.setFreq(pfreq3);
+  aPhasor6.setFreq(pfreq3+0.2f);
+  
+}
+
+
+void updateControlSketch4(){
+    // change proportional frequency of second tone
+    byte harmonic = (byte)(int)pot1/4;
+    byte shimmer = (byte)(int)pot2;
+    Q16n16 harmonic_step = s5freq1/12;
+    Q16n16 freq2difference = harmonic*harmonic_step;
+    freq2difference += (harmonic_step*shimmer)>>11;
+    Q16n16 freq2 = s5freq1-freq2difference;
+    aSin2.setFreq_Q16n16(freq2); // set the frequency with a Q16n16 fractional number
+}
+
 
 AudioOutput_t updateAudio0(){
   return MonoOutput::fromAlmostNBit(12,
@@ -257,6 +320,23 @@ AudioOutput_t updateAudio2(){
   return MonoOutput::fromNBit(24, (int32_t) aSig.next() * aGain.next()); // shifted back to audio range after multiply
 }
 
+AudioOutput_t updateAudio3(){
+  char asig1 = (char)(aPhasor1.next()>>24);
+  char asig2 = (char)(aPhasor2.next()>>24);
+  char asig3 = (char)(aPhasor3.next()>>24);
+  char asig4 = (char)(aPhasor4.next()>>24);
+  char asig5 = (char)(aPhasor5.next()>>24);
+  char asig6 = (char)(aPhasor6.next()>>24);
+  return MonoOutput::fromNBit(9, (int)1*(((int)asig1-asig2) + ((int)asig3-asig4) + ((int)asig5-asig6) ));
+}
+
+
+AudioOutput_t updateAudio4(){
+  int asig = (int)((((uint32_t)aSin1.next()+ aSin2.next())*(200u+aGain2.next()))>>3);
+  return MonoOutput::fromAlmostNBit(9, asig).clip();
+}
+
+
 AudioOutput_t updateAudio(){
   switch (currentSketch){ 
     case 0:
@@ -270,6 +350,10 @@ AudioOutput_t updateAudio(){
     case 2:
     return updateAudio2();
 //    break;
+    case 3:
+    return updateAudio3();
+    case 4:
+    return updateAudio4();
   }
 }
 
